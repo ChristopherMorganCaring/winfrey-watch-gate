@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Watch to Unlock</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --tg-bg: #17212b;
+    --tg-text: #ffffff;
+    --tg-hint: #708499;
+    --tg-button: #5288c1;
+    --tg-button-text: #ffffff;
+    --tg-secondary-bg: #232e3c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--tg-bg);
+    color: var(--tg-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 8px 0 4px;
+    text-align: center;
+  }
+  #status {
+    color: var(--tg-hint);
+    font-size: 14px;
+    text-align: center;
+    margin: 0 0 16px;
+    min-height: 18px;
+  }
+  #player-wrap {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  #player { width: 100%; height: 100%; }
+  #claimBtn {
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: var(--tg-button);
+    color: var(--tg-button-text);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #claimBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  #errorBox {
+    background: var(--tg-secondary-bg);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Watch to unlock your bonus</h1>
+  <p id="status">Loading video…</p>
+  <div id="player-wrap"><div id="player"></div></div>
+  <button id="claimBtn" disabled>Watch the full video to unlock</button>
+</div>
+
+<script>
+(function () {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const params = new URLSearchParams(window.location.search);
+  const videoId = params.get("v");
+
+  const statusEl = document.getElementById("status");
+  const claimBtn = document.getElementById("claimBtn");
+  const appEl = document.getElementById("app");
+
+  function applyTheme(theme) {
+    if (!theme) return;
+    const root = document.documentElement.style;
+    if (theme.bg_color) root.setProperty("--tg-bg", theme.bg_color);
+    if (theme.text_color) root.setProperty("--tg-text", theme.text_color);
+    if (theme.hint_color) root.setProperty("--tg-hint", theme.hint_color);
+    if (theme.button_color) root.setProperty("--tg-button", theme.button_color);
+    if (theme.button_text_color) root.setProperty("--tg-button-text", theme.button_text_color);
+    if (theme.secondary_bg_color) root.setProperty("--tg-secondary-bg", theme.secondary_bg_color);
+  }
+
+  function showFatalError(message) {
+    appEl.innerHTML = '<div id="errorBox"><p>' + message + "</p></div>";
+  }
+
+  if (!tg) {
+    showFatalError("Please open this page from the bot, not directly in a browser.");
+    return;
+  }
+
+  tg.ready();
+  tg.expand();
+  applyTheme(tg.themeParams);
+  tg.onEvent("themeChanged", function () { applyTheme(tg.themeParams); });
+
+  if (!videoId) {
+    showFatalError("No video is configured yet. Check back soon.");
+    return;
+  }
+
+  let player = null;
+  let maxAllowedTime = 0;
+  let pollHandle = null;
+  const SEEK_TOLERANCE_SECONDS = 2;
+
+  window.onYouTubeIframeAPIReady = function () {
+    player = new YT.Player("player", {
+      videoId: videoId,
+      playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+      events: {
+        onReady: function () { statusEl.textContent = "Watch the full video to unlock your bonus."; },
+        onStateChange: onPlayerStateChange,
+        onPlaybackRateChange: function () {
+          if (player && typeof player.getPlaybackRate === "function" && player.getPlaybackRate() !== 1) {
+            player.setPlaybackRate(1);
+          }
+        },
+      },
+    });
+  };
+
+  function onPlayerStateChange(event) {
+    if (event.data === YT.PlayerState.PLAYING) {
+      if (!pollHandle) pollHandle = setInterval(checkProgress, 500);
+    } else if (event.data === YT.PlayerState.ENDED) {
+      stopPolling();
+      unlockClaim();
+    } else if (event.data === YT.PlayerState.PAUSED) {
+      // leave the polling loop running; a paused video can't be scrubbed further anyway
+    }
+  }
+
+  function checkProgress() {
+    if (!player || typeof player.getCurrentTime !== "function") return;
+    const current = player.getCurrentTime();
+    if (current > maxAllowedTime + SEEK_TOLERANCE_SECONDS) {
+      player.seekTo(maxAllowedTime, true);
+    } else if (current > maxAllowedTime) {
+      maxAllowedTime = current;
+    }
+  }
+
+  function stopPolling() {
+    if (pollHandle) {
+      clearInterval(pollHandle);
+      pollHandle = null;
+    }
+  }
+
+  function unlockClaim() {
+    statusEl.textContent = "Video complete — claim your bonus!";
+    claimBtn.disabled = false;
+    claimBtn.textContent = "🎉 Claim Bonus";
+  }
+
+  claimBtn.addEventListener("click", function () {
+    if (claimBtn.disabled) return;
+    claimBtn.disabled = true;
+    claimBtn.textContent = "Claiming…";
+    tg.sendData(JSON.stringify({ completed: true, videoId: videoId }));
+    tg.close();
+  });
+
+  const tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+})();
+</script>
+</body>
+</html>
