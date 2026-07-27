@@ -185,16 +185,37 @@
   // countdown duration away from this page before the real watch-to-unlock
   // stage becomes reachable. Skipped entirely when no ad link is configured.
   //
-  // Phase machine driven by the Page Visibility API so the countdown reflects
-  // real time spent on the ad tab, not just elapsed wall-clock time sitting in
-  // the Mini App: idle -> waitingForLeave -> away -> countingLocal -> ready.
-  // (Tapping Start and immediately switching back would otherwise let the
-  // in-app timer run out without ever viewing the ad.)
+  // Phase machine: idle -> waitingForLeave -> away -> countingLocal -> ready.
+  // "Away" is detected from window blur/focus (an external window/app covering
+  // this one loses/regains OS focus) AND document visibilitychange (tab-switch
+  // or app-background) — different Telegram clients surface the transition
+  // differently, so both signals feed the same phase machine and whichever
+  // fires first wins. (Tapping Start and immediately switching back would
+  // otherwise let the in-app timer run out without ever viewing the ad.)
   let adGatePassed = !adUrl;
   let phase = "idle";
   let awayStartedAt = null;
   let fallbackTimer = null;
   let localCountdownInterval = null;
+
+  function markAway() {
+    if (phase !== "waitingForLeave") return;
+    if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+    phase = "away";
+    awayStartedAt = Date.now();
+  }
+
+  function markReturned() {
+    if (phase !== "away") return;
+    const awaySeconds = (Date.now() - awayStartedAt) / 1000;
+    awayStartedAt = null;
+    if (awaySeconds >= AD_COUNTDOWN_SECONDS) {
+      markAdGateReady();
+    } else {
+      phase = "countingLocal";
+      beginLocalCountdown(Math.ceil(AD_COUNTDOWN_SECONDS - awaySeconds));
+    }
+  }
 
   if (adUrl) {
     adGateEl.classList.remove("hidden");
@@ -212,9 +233,9 @@
       adCountdownEl.classList.remove("hidden");
       adCountdownEl.textContent = "Waiting for the sponsor page to open…";
 
-      // Some platforms/embeds may not reliably fire visibilitychange when
-      // opening an external link. If we never see one, fall back to a plain
-      // timed countdown after a short grace period so the gate still works.
+      // Some platforms/embeds never fire a reliable away signal at all. If we
+      // don't see one, fall back to a plain timed countdown after a short
+      // grace period so the gate still works rather than getting stuck.
       fallbackTimer = setTimeout(function () {
         if (phase === "waitingForLeave") {
           phase = "countingLocal";
@@ -223,23 +244,11 @@
       }, 2500);
     });
 
+    window.addEventListener("blur", markAway);
+    window.addEventListener("focus", markReturned);
     document.addEventListener("visibilitychange", function () {
-      if (document.hidden) {
-        if (phase === "waitingForLeave") {
-          if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-          phase = "away";
-          awayStartedAt = Date.now();
-        }
-      } else if (phase === "away") {
-        const awaySeconds = (Date.now() - awayStartedAt) / 1000;
-        awayStartedAt = null;
-        if (awaySeconds >= AD_COUNTDOWN_SECONDS) {
-          markAdGateReady();
-        } else {
-          phase = "countingLocal";
-          beginLocalCountdown(Math.ceil(AD_COUNTDOWN_SECONDS - awaySeconds));
-        }
-      }
+      if (document.hidden) markAway();
+      else markReturned();
     });
 
     adContinueBtn.addEventListener("click", function () {
