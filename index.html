@@ -181,41 +181,19 @@
     return;
   }
 
-  // Ad gate: user must tap Start (opens the ad link) and actually spend the
-  // countdown duration away from this page before the real watch-to-unlock
-  // stage becomes reachable. Skipped entirely when no ad link is configured.
+  // Ad gate: user must tap Start (opens the ad link) and wait out a flat
+  // countdown before the real watch-to-unlock stage becomes reachable.
+  // Skipped entirely when no ad link is configured.
   //
-  // Phase machine: idle -> waitingForLeave -> away -> countingLocal -> ready.
-  // "Away" is detected from window blur/focus (an external window/app covering
-  // this one loses/regains OS focus) AND document visibilitychange (tab-switch
-  // or app-background) — different Telegram clients surface the transition
-  // differently, so both signals feed the same phase machine and whichever
-  // fires first wins. (Tapping Start and immediately switching back would
-  // otherwise let the in-app timer run out without ever viewing the ad.)
+  // This is a plain timer, not an "is the user actually looking at the ad"
+  // check — Telegram's Mini App embedding (confirmed on mobile) doesn't
+  // propagate any focus/visibility signal to this page when openLink hands
+  // off to its in-app/external browser, so there is no reliable way for
+  // client-side JS here to detect that. A determined user can still wait out
+  // the timer without viewing the ad; closing that gap for real requires a
+  // CPA/link-locker network with server-side postback verification, which is
+  // a separate backend project, not a page-side fix.
   let adGatePassed = !adUrl;
-  let phase = "idle";
-  let awayStartedAt = null;
-  let fallbackTimer = null;
-  let localCountdownInterval = null;
-
-  function markAway() {
-    if (phase !== "waitingForLeave") return;
-    if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-    phase = "away";
-    awayStartedAt = Date.now();
-  }
-
-  function markReturned() {
-    if (phase !== "away") return;
-    const awaySeconds = (Date.now() - awayStartedAt) / 1000;
-    awayStartedAt = null;
-    if (awaySeconds >= AD_COUNTDOWN_SECONDS) {
-      markAdGateReady();
-    } else {
-      phase = "countingLocal";
-      beginLocalCountdown(Math.ceil(AD_COUNTDOWN_SECONDS - awaySeconds));
-    }
-  }
 
   if (adUrl) {
     adGateEl.classList.remove("hidden");
@@ -229,26 +207,7 @@
       } else {
         window.open(adUrl, "_blank");
       }
-      phase = "waitingForLeave";
-      adCountdownEl.classList.remove("hidden");
-      adCountdownEl.textContent = "Waiting for the sponsor page to open…";
-
-      // Some platforms/embeds never fire a reliable away signal at all. If we
-      // don't see one, fall back to a plain timed countdown after a short
-      // grace period so the gate still works rather than getting stuck.
-      fallbackTimer = setTimeout(function () {
-        if (phase === "waitingForLeave") {
-          phase = "countingLocal";
-          beginLocalCountdown(AD_COUNTDOWN_SECONDS);
-        }
-      }, 2500);
-    });
-
-    window.addEventListener("blur", markAway);
-    window.addEventListener("focus", markReturned);
-    document.addEventListener("visibilitychange", function () {
-      if (document.hidden) markAway();
-      else markReturned();
+      beginAdCountdown();
     });
 
     adContinueBtn.addEventListener("click", function () {
@@ -258,26 +217,20 @@
     });
   }
 
-  function beginLocalCountdown(seconds) {
-    if (localCountdownInterval) return;
-    let remaining = seconds;
+  function beginAdCountdown() {
+    let remaining = AD_COUNTDOWN_SECONDS;
+    adCountdownEl.classList.remove("hidden");
     adCountdownEl.textContent = "You can continue in " + remaining + "s…";
-    localCountdownInterval = setInterval(function () {
+    const interval = setInterval(function () {
       remaining -= 1;
       if (remaining <= 0) {
-        clearInterval(localCountdownInterval);
-        localCountdownInterval = null;
-        markAdGateReady();
+        clearInterval(interval);
+        adCountdownEl.textContent = "You're all set!";
+        adContinueBtn.classList.remove("hidden");
       } else {
         adCountdownEl.textContent = "You can continue in " + remaining + "s…";
       }
     }, 1000);
-  }
-
-  function markAdGateReady() {
-    phase = "ready";
-    adCountdownEl.textContent = "You're all set!";
-    adContinueBtn.classList.remove("hidden");
   }
 
   let player = null;
