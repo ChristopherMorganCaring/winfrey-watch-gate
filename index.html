@@ -45,6 +45,7 @@
     min-height: 18px;
   }
   #player-wrap {
+    position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
     background: #000;
@@ -52,6 +53,47 @@
     overflow: hidden;
   }
   #player { width: 100%; height: 100%; }
+  #adGate {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 20px;
+    text-align: center;
+    z-index: 5;
+  }
+  #adGate.hidden { display: none; }
+  #adGateText {
+    font-size: 14px;
+    color: var(--tg-hint);
+    margin: 0;
+  }
+  #adCountdown {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+  }
+  .gate-btn {
+    width: 100%;
+    max-width: 320px;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: var(--tg-button);
+    color: var(--tg-button-text);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .gate-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .gate-btn.hidden { display: none; }
   #claimBtn {
     width: 100%;
     margin-top: 20px;
@@ -81,7 +123,15 @@
 <div id="app">
   <h1>Watch to unlock your bonus</h1>
   <p id="status">Loading video…</p>
-  <div id="player-wrap"><div id="player"></div></div>
+  <div id="player-wrap">
+    <div id="player"></div>
+    <div id="adGate" class="hidden">
+      <p id="adGateText">Tap below to continue — a quick sponsor page will open.</p>
+      <button id="adStartBtn" class="gate-btn">▶️ Start</button>
+      <p id="adCountdown" class="hidden"></p>
+      <button id="adContinueBtn" class="gate-btn hidden">▶️ Watch Now</button>
+    </div>
+  </div>
   <button id="claimBtn" disabled>Watch the full video to unlock</button>
 </div>
 
@@ -90,10 +140,16 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   const params = new URLSearchParams(window.location.search);
   const videoId = params.get("v");
+  const adUrl = params.get("ad");
+  const AD_COUNTDOWN_SECONDS = 11;
 
   const statusEl = document.getElementById("status");
   const claimBtn = document.getElementById("claimBtn");
   const appEl = document.getElementById("app");
+  const adGateEl = document.getElementById("adGate");
+  const adStartBtn = document.getElementById("adStartBtn");
+  const adCountdownEl = document.getElementById("adCountdown");
+  const adContinueBtn = document.getElementById("adContinueBtn");
 
   function applyTheme(theme) {
     if (!theme) return;
@@ -125,6 +181,49 @@
     return;
   }
 
+  // Ad gate: user must tap Start (opens the ad link) and wait out the countdown
+  // before the real watch-to-unlock stage becomes reachable. Skipped entirely
+  // when no ad link is configured for this video.
+  let adGatePassed = !adUrl;
+
+  if (adUrl) {
+    adGateEl.classList.remove("hidden");
+    statusEl.textContent = "Complete the step below to unlock the video.";
+
+    adStartBtn.addEventListener("click", function () {
+      adStartBtn.disabled = true;
+      adStartBtn.classList.add("hidden");
+      if (typeof tg.openLink === "function") {
+        tg.openLink(adUrl);
+      } else {
+        window.open(adUrl, "_blank");
+      }
+      beginAdCountdown();
+    });
+
+    adContinueBtn.addEventListener("click", function () {
+      adGatePassed = true;
+      adGateEl.classList.add("hidden");
+      statusEl.textContent = "Watch the full video to unlock your bonus.";
+    });
+  }
+
+  function beginAdCountdown() {
+    let remaining = AD_COUNTDOWN_SECONDS;
+    adCountdownEl.classList.remove("hidden");
+    adCountdownEl.textContent = "You can continue in " + remaining + "s…";
+    const interval = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(interval);
+        adCountdownEl.textContent = "You're all set!";
+        adContinueBtn.classList.remove("hidden");
+      } else {
+        adCountdownEl.textContent = "You can continue in " + remaining + "s…";
+      }
+    }, 1000);
+  }
+
   let player = null;
   let maxAllowedTime = 0;
   let pollHandle = null;
@@ -135,7 +234,9 @@
       videoId: videoId,
       playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
       events: {
-        onReady: function () { statusEl.textContent = "Watch the full video to unlock your bonus."; },
+        onReady: function () {
+          if (adGatePassed) statusEl.textContent = "Watch the full video to unlock your bonus.";
+        },
         onStateChange: onPlayerStateChange,
         onPlaybackRateChange: function () {
           if (player && typeof player.getPlaybackRate === "function" && player.getPlaybackRate() !== 1) {
@@ -147,6 +248,7 @@
   };
 
   function onPlayerStateChange(event) {
+    if (!adGatePassed) return;
     if (event.data === YT.PlayerState.PLAYING) {
       if (!pollHandle) pollHandle = setInterval(checkProgress, 500);
     } else if (event.data === YT.PlayerState.ENDED) {
