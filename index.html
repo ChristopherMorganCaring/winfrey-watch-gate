@@ -233,6 +233,13 @@
     }, 1000);
   }
 
+  const requiredSecondsParam = parseInt(params.get("req"), 10);
+  // Randomized per-open by the bot within the admin's configured range; when
+  // absent, falls back to the old behavior of requiring the full video.
+  const requiredSeconds = Number.isFinite(requiredSecondsParam) && requiredSecondsParam > 0
+    ? requiredSecondsParam
+    : null;
+
   let player = null;
   let maxAllowedTime = 0;
   let pollHandle = null;
@@ -275,6 +282,10 @@
       player.seekTo(maxAllowedTime, true);
     } else if (current > maxAllowedTime) {
       maxAllowedTime = current;
+    }
+    if (requiredSeconds && maxAllowedTime >= requiredSeconds) {
+      stopPolling();
+      unlockClaim();
     }
   }
 
