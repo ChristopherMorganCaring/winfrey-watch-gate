@@ -181,10 +181,20 @@
     return;
   }
 
-  // Ad gate: user must tap Start (opens the ad link) and wait out the countdown
-  // before the real watch-to-unlock stage becomes reachable. Skipped entirely
-  // when no ad link is configured for this video.
+  // Ad gate: user must tap Start (opens the ad link) and actually spend the
+  // countdown duration away from this page before the real watch-to-unlock
+  // stage becomes reachable. Skipped entirely when no ad link is configured.
+  //
+  // Phase machine driven by the Page Visibility API so the countdown reflects
+  // real time spent on the ad tab, not just elapsed wall-clock time sitting in
+  // the Mini App: idle -> waitingForLeave -> away -> countingLocal -> ready.
+  // (Tapping Start and immediately switching back would otherwise let the
+  // in-app timer run out without ever viewing the ad.)
   let adGatePassed = !adUrl;
+  let phase = "idle";
+  let awayStartedAt = null;
+  let fallbackTimer = null;
+  let localCountdownInterval = null;
 
   if (adUrl) {
     adGateEl.classList.remove("hidden");
@@ -198,7 +208,38 @@
       } else {
         window.open(adUrl, "_blank");
       }
-      beginAdCountdown();
+      phase = "waitingForLeave";
+      adCountdownEl.classList.remove("hidden");
+      adCountdownEl.textContent = "Waiting for the sponsor page to open…";
+
+      // Some platforms/embeds may not reliably fire visibilitychange when
+      // opening an external link. If we never see one, fall back to a plain
+      // timed countdown after a short grace period so the gate still works.
+      fallbackTimer = setTimeout(function () {
+        if (phase === "waitingForLeave") {
+          phase = "countingLocal";
+          beginLocalCountdown(AD_COUNTDOWN_SECONDS);
+        }
+      }, 2500);
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        if (phase === "waitingForLeave") {
+          if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+          phase = "away";
+          awayStartedAt = Date.now();
+        }
+      } else if (phase === "away") {
+        const awaySeconds = (Date.now() - awayStartedAt) / 1000;
+        awayStartedAt = null;
+        if (awaySeconds >= AD_COUNTDOWN_SECONDS) {
+          markAdGateReady();
+        } else {
+          phase = "countingLocal";
+          beginLocalCountdown(Math.ceil(AD_COUNTDOWN_SECONDS - awaySeconds));
+        }
+      }
     });
 
     adContinueBtn.addEventListener("click", function () {
@@ -208,20 +249,26 @@
     });
   }
 
-  function beginAdCountdown() {
-    let remaining = AD_COUNTDOWN_SECONDS;
-    adCountdownEl.classList.remove("hidden");
+  function beginLocalCountdown(seconds) {
+    if (localCountdownInterval) return;
+    let remaining = seconds;
     adCountdownEl.textContent = "You can continue in " + remaining + "s…";
-    const interval = setInterval(function () {
+    localCountdownInterval = setInterval(function () {
       remaining -= 1;
       if (remaining <= 0) {
-        clearInterval(interval);
-        adCountdownEl.textContent = "You're all set!";
-        adContinueBtn.classList.remove("hidden");
+        clearInterval(localCountdownInterval);
+        localCountdownInterval = null;
+        markAdGateReady();
       } else {
         adCountdownEl.textContent = "You can continue in " + remaining + "s…";
       }
     }, 1000);
+  }
+
+  function markAdGateReady() {
+    phase = "ready";
+    adCountdownEl.textContent = "You're all set!";
+    adContinueBtn.classList.remove("hidden");
   }
 
   let player = null;
