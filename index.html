@@ -110,6 +110,18 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
+  #likeBtn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--tg-button);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--tg-text);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
   #errorBox {
     background: var(--tg-secondary-bg);
     border-radius: 12px;
@@ -132,6 +144,7 @@
       <button id="adContinueBtn" class="gate-btn hidden">▶️ Watch Now</button>
     </div>
   </div>
+  <button id="likeBtn">👍 Like on YouTube</button>
   <button id="claimBtn" disabled>Watch the full video to unlock</button>
 </div>
 
@@ -145,6 +158,7 @@
 
   const statusEl = document.getElementById("status");
   const claimBtn = document.getElementById("claimBtn");
+  const likeBtn = document.getElementById("likeBtn");
   const appEl = document.getElementById("app");
   const adGateEl = document.getElementById("adGate");
   const adStartBtn = document.getElementById("adStartBtn");
@@ -180,6 +194,15 @@
     showFatalError("No video is configured yet. Check back soon.");
     return;
   }
+
+  likeBtn.addEventListener("click", function () {
+    const youtubeUrl = "https://www.youtube.com/watch?v=" + encodeURIComponent(videoId);
+    if (typeof tg.openLink === "function") {
+      tg.openLink(youtubeUrl);
+    } else {
+      window.open(youtubeUrl, "_blank");
+    }
+  });
 
   // Ad gate: user must tap Start (opens the ad link) and wait out a flat
   // countdown before the real watch-to-unlock stage becomes reachable.
