@@ -100,9 +100,12 @@
     font-weight: 600;
     cursor: pointer;
   }
+  .agree-btn.locked {
+    opacity: 0.55;
+  }
   .agree-btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
+    opacity: 0.55;
+    cursor: default;
   }
   #agreeHint {
     margin: 0;
@@ -164,7 +167,7 @@
 </ul>
 </div>
 <div id="footerBar">
-  <button id="agreeBtn" class="agree-btn" disabled>✅ I Agree to the Creator Agreement</button>
+  <button id="agreeBtn" class="agree-btn locked" type="button">✅ I Agree to the Creator Agreement</button>
   <p id="agreeHint">Scroll to the bottom of the agreement to continue</p>
 </div>
 <script>
@@ -208,24 +211,76 @@
   var agreeHint = document.getElementById("agreeHint");
   var LABEL = agreeBtn.textContent;
 
-  // Like the watch-gate: the reader must reach the bottom before agreeing
+  // Scroll-to-bottom gate. The button is deliberately NOT a real `disabled`
+  // element while locked: browsers/WebViews swallow clicks on disabled
+  // <button>s entirely, so a tap would do nothing at all. Keeping it tappable
+  // and enforcing the gate in JS lets a locked tap explain itself instead.
   var bottomReached = false;
+  var saving = false;
+
+  function atBottom() {
+    var el = document.scrollingElement || document.documentElement;
+    var docHeight = Math.max(
+      el ? el.scrollHeight : 0,
+      document.body ? document.body.scrollHeight : 0
+    );
+    var viewport = window.innerHeight || (el ? el.clientHeight : 0);
+    var scrollTop = window.scrollY ||
+      (el ? el.scrollTop : 0) ||
+      (document.body ? document.body.scrollTop : 0);
+    // Negative/large values are fine: a doc that fits the viewport (or a
+    // webview that reports a taller viewport than the doc) means the reader is
+    // already at the bottom and should never get stuck on a dead button.
+    return docHeight - scrollTop - viewport < 120;
+  }
+
+  function unlock() {
+    if (bottomReached) return;
+    bottomReached = true;
+    agreeBtn.classList.remove("locked");
+    agreeHint.textContent = "Thanks for reading the whole agreement!";
+  }
+
   function checkScroll() {
     if (bottomReached) return;
-    var el = document.documentElement;
-    if (el.scrollHeight - window.scrollY - window.innerHeight < 90) {
-      bottomReached = true;
-      agreeBtn.disabled = false;
-      agreeHint.textContent = "Thanks for reading the whole agreement!";
-    }
+    if (atBottom()) unlock();
   }
-  window.addEventListener("scroll", checkScroll, { passive: true });
+
+  // Listen on capture so the WebView can't swallow the events, and poll as a
+  // final fallback for clients that fire no scroll event on the window.
+  window.addEventListener("scroll", checkScroll, { capture: true, passive: true });
   window.addEventListener("resize", checkScroll);
+  if ("ontouchmove" in window) {
+    window.addEventListener("touchmove", checkScroll, { capture: true, passive: true });
+  }
+  setInterval(checkScroll, 400);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(checkScroll); // font swap can change doc height
+  }
+  window.addEventListener("load", checkScroll);
   checkScroll();
 
+  function onLockedTap() {
+    agreeHint.textContent = "Keep scrolling — the button unlocks at the bottom of the document.";
+    agreeHint.style.color = "#ffd28a";
+    setTimeout(function () { agreeHint.style.color = ""; }, 3000);
+    // Glide to the end so a locked tap always ends in an unlocked button.
+    try {
+      window.scrollTo({ top: 1e9, behavior: "smooth" });
+    } catch (e) {
+      window.scrollTo(0, document.documentElement.scrollHeight || document.body.scrollHeight);
+    }
+  }
+
   agreeBtn.addEventListener("click", function () {
-    if (agreeBtn.disabled) return;
-    agreeBtn.disabled = true;
+    if (saving) return;
+    if (!bottomReached) {
+      onLockedTap();
+      return; // the smooth scroll above triggers checkScroll() at the bottom
+    }
+    saving = true;
+    agreeBtn.classList.remove("locked");
+    agreeBtn.disabled = true; // only now — nothing else can be clicked mid-send
     agreeBtn.textContent = "Saving…";
     agreeHint.textContent = "";
     try {
@@ -234,6 +289,7 @@
       agreeHint.textContent = "Returning you to the bot…";
       setTimeout(function () { try { tg.close(); } catch (e) {} }, 450);
     } catch (err) {
+      saving = false;
       agreeBtn.disabled = false;
       agreeBtn.textContent = LABEL;
       agreeHint.textContent =
