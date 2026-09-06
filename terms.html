@@ -284,8 +284,17 @@
     try {
       tg.sendData(JSON.stringify({ doc: DOC, action: "accept", version: VERSION }));
       agreeBtn.textContent = "✅ Accepted!";
-      agreeHint.textContent = "Returning you to the bot…";
-      setTimeout(function () { try { tg.close(); } catch (e) {} }, 450);
+      agreeHint.textContent = "Closing…";
+      // Telegram closes the Mini App itself when sendData is delivered, so we
+      // deliberately do NOT call tg.close() here: a client that silently drops
+      // sendData would otherwise look identical to a successful handoff. If the
+      // window is still open after a few seconds the data was not delivered.
+      setTimeout(function () {
+        agreeHint.textContent =
+          "⚠️ Still open — your Telegram client did not deliver the acceptance. " +
+          "Close this page and tap “✅ I've read the Terms — Accept” under the Terms message instead.";
+        agreeHint.style.color = "#ffd28a";
+      }, 6000);
     } catch (err) {
       saving = false;
       agreeBtn.disabled = false;
