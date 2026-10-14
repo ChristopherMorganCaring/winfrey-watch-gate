@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#100c13" />
+    <meta name="description" content="Meet the creators behind WINFREY." />
+    <link rel="icon" href="./assets/winfrey-logo.jpg" />
+    <title>WINFREY — Meet Models</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#home" aria-label="Meet Models home">
+          <img class="brand-logo" src="./assets/winfrey-logo.jpg" alt="" /><span>WINFREY</span>
+        </a>
+        <label class="search-box" aria-label="Search models">
+          <span aria-hidden="true">⌕</span>
+          <input id="search" type="search" placeholder="Search creators" autocomplete="off" />
+        </label>
+        <button class="avatar-button" id="profile-shortcut" aria-label="Open profile">☺</button>
+      </header>
+
+      <main id="main-content">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <span class="eyebrow">WINFREY CREATOR DIRECTORY</span>
+            <h1 id="hero-title">Find your<br /><em>favorite</em> creators.</h1>
+            <p>Get closer to the people behind the content.</p>
+          </div>
+          <div class="hero-art" aria-hidden="true"><span>MM</span><i>✦</i></div>
+        </section>
+
+        <nav class="filters" id="filters" aria-label="Filter creators">
+          <button class="chip active" data-filter="all">✦ All</button>
+          <button class="chip" data-filter="hot">🔥 Hot</button>
+          <button class="chip" data-filter="solo">🎥 Solo</button>
+          <button class="chip" data-filter="live">💃 Live</button>
+          <button class="chip" data-filter="vip">⭐ VIP</button>
+          <button class="chip" data-filter="explicit">🔞 Explicit</button>
+          <button class="chip" data-filter="verified">✓ Verified</button>
+        </nav>
+
+        <section class="section featured-section" id="featured-section">
+          <div class="section-heading"><div><span class="eyebrow">HAND-PICKED</span><h2>Featured</h2></div><span class="section-note">Meet the standouts</span></div>
+          <div class="featured-row" id="featured-list"></div>
+        </section>
+
+        <section class="section directory-section">
+          <div class="section-heading"><div><span class="eyebrow">GET TO KNOW THEM</span><h2 id="directory-title">Creator directory</h2></div><span class="result-count" id="result-count"></span></div>
+          <div class="creator-grid" id="creator-grid" aria-live="polite"></div>
+          <div class="empty-state hidden" id="empty-state">
+            <span class="empty-icon">✦</span>
+            <h3 id="empty-title">Your next favorite is on the way</h3>
+            <p id="empty-copy">New creator profiles will appear here as they’re published.</p>
+          </div>
+        </section>
+      </main>
+
+      <section class="secondary-screen hidden" id="earn-screen" aria-labelledby="earn-title">
+        <span class="eyebrow">A LITTLE SOMETHING EXTRA</span>
+        <h1 id="earn-title">Earn as you<br /><em>explore.</em></h1>
+        <p>Check in daily, invite friends, and earn Coins in the bot. Use them on Free / Promo Vault content.</p>
+        <div class="earn-card"><span>🎁</span><div><strong>Daily check-in</strong><small>Claim your daily Coins in the bot</small></div><button data-bot-action="checkin">Open ↗</button></div>
+        <div class="earn-card"><span>👥</span><div><strong>Invite friends</strong><small>Earn Coins for confirmed referrals</small></div><button data-bot-action="affiliate">Open ↗</button></div>
+      </section>
+
+      <section class="secondary-screen hidden" id="profile-screen" aria-labelledby="profile-title">
+        <span class="eyebrow">YOUR ACCOUNT</span>
+        <h1 id="profile-title">Welcome<span id="profile-name"></span>.</h1>
+        <p>Your account, Coins, and unlocked content are managed securely in the Telegram bot.</p>
+        <button class="primary-button" data-close-app>Return to the bot <span>↗</span></button>
+      </section>
+
+      <nav class="bottom-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-tab="home"><span>⌂</span>Home</button>
+        <button class="nav-item" data-tab="trending"><span>🔥</span>Trending</button>
+        <button class="nav-item" data-tab="earn"><span>🎁</span>Earn</button>
+        <button class="nav-item" data-tab="profile"><span>☺</span>Profile</button>
+      </nav>
+    </div>
+
+    <dialog id="creator-dialog" class="profile-dialog">
+      <button class="dialog-close" id="dialog-close" aria-label="Close creator profile">×</button>
+      <div id="dialog-content"></div>
+    </dialog>
+    <script src="./app.js"></script>
+  </body>
+</html>
