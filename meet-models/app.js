@@ -35,9 +35,18 @@
   }
 
   function showProfile(creator) {
-    const items = (creator.items || []).map((item) => item.content_code
-      ? `<button class="content-tile" data-item-code="${safe(item.content_code)}"><b>${safe(item.title || 'Private content')}</b><small>🔒 ${safe(item.price_label || 'View unlock options')}　→</small></button>`
-      : `<div class="content-tile"><b>${safe(item.title || 'Private content')}</b><small>🔒 ${safe(item.price_label || 'Coming soon')}</small></div>`).join('');
+    const items = (creator.items || []).map((item) => {
+      const previewUrl = assetUrl(item.preview_url);
+      const media = previewUrl
+        ? (item.preview_media_type === 'video'
+          ? `<video class="item-preview" src="${safe(previewUrl)}" controls muted playsinline preload="metadata"></video>`
+          : `<img class="item-preview" src="${safe(previewUrl)}" alt="Preview for ${safe(item.title || 'creator content')}" loading="lazy" />`)
+        : '';
+      const details = `<span class="item-details"><b>${safe(item.title || 'Private content')}</b><small>${safe(item.description || '')}</small></span>`;
+      return item.content_code
+        ? `<article class="content-tile">${media}${details}<button class="content-buy" data-item-code="${safe(item.content_code)}">🔒 ${safe(item.price_label || 'View unlock options')} · Purchase in Telegram →</button></article>`
+        : `<div class="content-tile">${media}${details}</div>`;
+    }).join('');
     const preview = assetUrl(creator.preview_image);
     document.querySelector('#dialog-content').innerHTML = `
       <div class="dialog-cover">${preview ? `<img class="cover-photo" src="${safe(preview)}" alt="" />` : ''}<span class="cover-initial">${safe(initials(creator.name))}</span></div>
